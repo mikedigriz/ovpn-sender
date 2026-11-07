@@ -113,13 +113,14 @@ client1.ovpn
 
 (The CLI output is in Russian: URL, username, password, link page.)
 
-The user installs OpenVPN Connect, taps **+** -> **Import Profile** -> **URL** and enters the URL, username and password. The password is one-time: by default it lives 24 hours and allows 3 imports. The link page is a browser fallback with a "Download profile" button.
+The user installs OpenVPN Connect, taps **+** -> **Import Profile** -> **URL** and enters the URL, username and password. The password is one-time: by default it lives 24 hours and allows 3 imports. The link page is a browser fallback with a "Download profile" button. Below the data `add` prints a QR code of that page, so a phone camera can scan it right off the screen. When the page is opened on a PC, it shows the QR as well.
 
 With compose use `docker compose exec ovpn-sender` instead of `docker exec ovpn`.
 
 | Command | What it does |
 |---|---|
-| `add [files] [--ttl h] [--max N] [--user name]` | issue access (`0` - unlimited; no files - all profiles) |
+| `add [files] [--ttl h] [--max N] [--user name] [--no-qr]` | issue access (`0` - unlimited; no files - all profiles) |
+| `qr <file or token prefix>` | show the QR code and data of live access again |
 | `list [-a]` | status of issued access. With `-a` - live ones only, with URL, username, password and link |
 | `revoke <file or token prefix>` | revoke |
 | `cleanup` | drop expired and revoked records |

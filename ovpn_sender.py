@@ -124,6 +124,227 @@ def too_many_fails(ip):
         return len(recent) >= FAIL_MAX
 
 
+# ---------- QR: byte mode, уровень коррекции M, версии 1-10 (до 213 байт) ----------
+
+# версия: (байт коррекции на блок, [(число блоков, байт данных в блоке), ...])
+QR_M = {1: (10, [(1, 16)]), 2: (16, [(1, 28)]), 3: (26, [(1, 44)]), 4: (18, [(2, 32)]),
+        5: (24, [(2, 43)]), 6: (16, [(4, 27)]), 7: (18, [(4, 31)]), 8: (22, [(2, 38), (2, 39)]),
+        9: (22, [(3, 36), (2, 37)]), 10: (26, [(4, 43), (1, 44)])}
+QR_ALIGN = {2: [6, 18], 3: [6, 22], 4: [6, 26], 5: [6, 30], 6: [6, 34],
+            7: [6, 22, 38], 8: [6, 24, 42], 9: [6, 26, 46], 10: [6, 28, 50]}
+QR_MASKS = [lambda x, y: (x + y) % 2 == 0, lambda x, y: y % 2 == 0,
+            lambda x, y: x % 3 == 0, lambda x, y: (x + y) % 3 == 0,
+            lambda x, y: (x // 3 + y // 2) % 2 == 0, lambda x, y: x * y % 2 + x * y % 3 == 0,
+            lambda x, y: (x * y % 2 + x * y % 3) % 2 == 0, lambda x, y: ((x + y) % 2 + x * y % 3) % 2 == 0]
+
+
+def _gf_tables():
+    exp, log = [0] * 512, [0] * 256
+    x = 1
+    for i in range(255):
+        exp[i], log[x] = x, i
+        x <<= 1
+        if x & 0x100:
+            x ^= 0x11D
+    exp[255:] = exp[:257]
+    return exp, log
+
+
+_GF_EXP, _GF_LOG = _gf_tables()
+
+
+def _gf_mul(a, b):
+    return _GF_EXP[_GF_LOG[a] + _GF_LOG[b]] if a and b else 0
+
+
+def _rs_ec(data, n):
+    """Байты коррекции Рида-Соломона: остаток от деления на порождающий многочлен."""
+    gen = [1]
+    for i in range(n):
+        nxt = gen + [0]
+        for j, c in enumerate(gen):
+            nxt[j + 1] ^= _gf_mul(c, _GF_EXP[i])
+        gen = nxt
+    res = list(data) + [0] * n
+    for i in range(len(data)):
+        if res[i]:
+            coef = res[i]
+            for j in range(1, len(gen)):
+                res[i + j] ^= _gf_mul(gen[j], coef)
+    return res[len(data):]
+
+
+def _qr_penalty(g):
+    n, score = len(g), 0
+    finder = [True, False, True, True, True, False, True]
+    for line in g + [list(col) for col in zip(*g)]:
+        run = 1
+        for i in range(1, n + 1):
+            if i < n and line[i] == line[i - 1]:
+                run += 1
+                continue
+            if run >= 5:
+                score += run - 2
+            run = 1
+        p = [False] * 4 + line + [False] * 4
+        for i in range(len(p) - 10):
+            if ((p[i:i + 7] == finder and not any(p[i + 7:i + 11]))
+                    or (p[i + 4:i + 11] == finder and not any(p[i:i + 4]))):
+                score += 40
+    for y in range(n - 1):
+        for x in range(n - 1):
+            if g[y][x] == g[y][x + 1] == g[y + 1][x] == g[y + 1][x + 1]:
+                score += 3
+    dark = sum(map(sum, g))
+    return score + 10 * (abs(dark * 100 // (n * n) - 50) // 5)
+
+
+def qr_matrix(text):
+    """Матрица QR (list строк из bool, True - темный модуль). ValueError, если не влезает."""
+    data = text.encode("utf-8")
+    for ver, (ec_len, groups) in QR_M.items():
+        cap = sum(cnt * size for cnt, size in groups)
+        count_bits = 8 if ver < 10 else 16
+        if 4 + count_bits + 8 * len(data) <= cap * 8:
+            break
+    else:
+        raise ValueError(f"строка длиннее {cap - 3} байт не влезает в QR")
+
+    bits = [0, 1, 0, 0] + [(len(data) >> i) & 1 for i in reversed(range(count_bits))]
+    bits += [(b >> i) & 1 for b in data for i in reversed(range(8))]
+    bits += [0] * min(4, cap * 8 - len(bits))
+    bits += [0] * (-len(bits) % 8)
+    words = [int("".join(map(str, bits[i:i + 8])), 2) for i in range(0, len(bits), 8)]
+    words += [0xEC, 0x11] * ((cap - len(words)) // 2) + [0xEC] * ((cap - len(words)) % 2)
+
+    blocks, k = [], 0
+    for cnt, size in groups:
+        for _ in range(cnt):
+            blocks.append(words[k:k + size])
+            k += size
+    ecs = [_rs_ec(b, ec_len) for b in blocks]
+    stream = [b[i] for i in range(max(map(len, blocks))) for b in blocks if i < len(b)]
+    stream += [e[i] for i in range(ec_len) for e in ecs]
+
+    n = 17 + 4 * ver
+    grid = [[False] * n for _ in range(n)]
+    func = [[False] * n for _ in range(n)]
+
+    def put(g, x, y, v):
+        g[y][x] = v
+        func[y][x] = True
+
+    def put_format(g, mask):
+        val = mask  # биты уровня M - 00
+        rem = val
+        for _ in range(10):
+            rem = (rem << 1) ^ ((rem >> 9) * 0x537)
+        fmt = (val << 10 | rem) ^ 0x5412
+        bit = [(fmt >> i) & 1 == 1 for i in range(15)]
+        for i in range(6):
+            put(g, 8, i, bit[i])
+        put(g, 8, 7, bit[6])
+        put(g, 8, 8, bit[7])
+        put(g, 7, 8, bit[8])
+        for i in range(9, 15):
+            put(g, 14 - i, 8, bit[i])
+        for i in range(8):
+            put(g, n - 1 - i, 8, bit[i])
+        for i in range(8, 15):
+            put(g, 8, n - 15 + i, bit[i])
+        put(g, 8, n - 8, True)
+
+    for i in range(n):
+        put(grid, 6, i, i % 2 == 0)
+        put(grid, i, 6, i % 2 == 0)
+    for cx, cy in ((3, 3), (n - 4, 3), (3, n - 4)):
+        for dy in range(-4, 5):
+            for dx in range(-4, 5):
+                if 0 <= cx + dx < n and 0 <= cy + dy < n:
+                    put(grid, cx + dx, cy + dy, max(abs(dx), abs(dy)) not in (2, 4))
+    pos = QR_ALIGN.get(ver, [])
+    for cy in pos:
+        for cx in pos:
+            if (cx, cy) in ((pos[0], pos[0]), (pos[0], pos[-1]), (pos[-1], pos[0])):
+                continue
+            for dy in range(-2, 3):
+                for dx in range(-2, 3):
+                    put(grid, cx + dx, cy + dy, max(abs(dx), abs(dy)) != 1)
+    put_format(grid, 0)  # резервируем области формата
+    if ver >= 7:
+        rem = ver
+        for _ in range(12):
+            rem = (rem << 1) ^ ((rem >> 11) * 0x1F25)
+        vbits = ver << 12 | rem
+        for i in range(18):
+            a, b = n - 11 + i % 3, i // 3
+            put(grid, a, b, (vbits >> i) & 1 == 1)
+            put(grid, b, a, (vbits >> i) & 1 == 1)
+
+    # данные змейкой по парам столбцов снизу вверх и обратно
+    i, total = 0, len(stream) * 8
+    for right in range(n - 1, 0, -2):
+        if right <= 6:
+            right -= 1  # вертикальная линия синхронизации
+        upward = ((right + 1) & 2) == 0
+        for vert in range(n):
+            y = n - 1 - vert if upward else vert
+            for x in (right, right - 1):
+                if not func[y][x] and i < total:
+                    grid[y][x] = (stream[i >> 3] >> (7 - (i & 7))) & 1 == 1
+                    i += 1
+
+    best = None
+    for mask, fn in enumerate(QR_MASKS):
+        g = [[v ^ (not func[y][x] and fn(x, y)) for x, v in enumerate(row)] for y, row in enumerate(grid)]
+        put_format(g, mask)
+        score = _qr_penalty(g)
+        if best is None or score < best[0]:
+            best = (score, g)
+    return best[1]
+
+
+def qr_terminal(text, quiet=2):
+    """QR полублоками: черное на белом явно через ANSI, чтобы читалось и на темной теме."""
+    m = qr_matrix(text)
+    n = len(m)
+
+    def dark(x, y):
+        return 0 <= x < n and 0 <= y < n and m[y][x]
+
+    rows = []
+    for y in range(-quiet, n + quiet, 2):
+        line = "".join(" ▀▄█"[dark(x, y) | dark(x, y + 1) << 1] for x in range(-quiet, n + quiet))
+        rows.append(f"\x1b[30;107m{line}\x1b[0m")
+    return "\n".join(rows)
+
+
+def qr_svg(text, quiet=4):
+    m = qr_matrix(text)
+    size = len(m) + 2 * quiet
+    path = []
+    for y, row in enumerate(m):
+        x = 0
+        while x < len(row):
+            if row[x]:
+                start = x
+                while x < len(row) and row[x]:
+                    x += 1
+                path.append(f"M{start + quiet} {y + quiet}h{x - start}v1h{start - x}z")
+            else:
+                x += 1
+    return (f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {size} {size}" shape-rendering="crispEdges" '
+            f'role="img" aria-label="QR"><rect width="{size}" height="{size}" fill="#fff"/>'
+            f'<path d="{"".join(path)}" fill="#000"/></svg>')
+
+
+def print_qr(url):
+    try:
+        print(qr_terminal(url))
+    except (ValueError, UnicodeEncodeError) as e:
+        print(f"  (QR не выведен: {e})")
+
+
 # ---------- HTTP ----------
 
 PAGE = """<!doctype html>
@@ -138,6 +359,8 @@ background:#ff7a00;color:#fff;text-decoration:none;font-weight:600}}
 a.alt{{background:#e4e4e4;color:#222}}
 ol{{padding-left:20px;line-height:1.5}} small{{color:#777}}
 td{{padding:4px 8px 4px 0}} code{{font-size:18px;user-select:all;-webkit-user-select:all}}
+.qr svg{{display:block;width:220px;height:220px;margin:8px 0}}
+@media (max-width:600px){{.qr{{display:none}}}}
 @media (prefers-color-scheme:dark){{body{{background:#111;color:#eee}}a.alt{{background:#333;color:#eee}}}}
 </style></head><body>
 <h2>Профиль {name}</h2>
@@ -150,6 +373,7 @@ td{{padding:4px 8px 4px 0}} code{{font-size:18px;user-select:all;-webkit-user-se
 <li>Android / ПК: скачайте файл и откройте его в OpenVPN Connect (Import Profile &rarr; File).</li>
 </ol>
 {app_import}
+{qr}
 <small>Ссылка действует до {expires}, осталось скачиваний: {left}.</small>
 </body></html>"""
 
@@ -338,10 +562,15 @@ class Handler(BaseHTTPRequestHandler):
         if entry.get("code"):
             app_import = APP_IMPORT.format(url=html.escape(connect_url(Handler.base_url)),
                                            user=html.escape(entry["user"]), code=html.escape(entry["code"]))
+        try:
+            # страница открыта на ПК - эта же ссылка камерой на телефон
+            qr = f'<div class="qr"><h3>Открыть на телефоне</h3>{qr_svg(f"{Handler.base_url}/p/{token}")}</div>'
+        except ValueError:
+            qr = ""
         # полный URL: за прокси с префиксом (/vpn/) путь от корня ушел бы мимо
         self._html(200, PAGE.format(
             name=html.escape(name), download=html.escape(Handler.base_url + download), deeplink=html.escape(deeplink),
-            app_import=app_import, expires=expires, left=left))
+            app_import=app_import, qr=qr, expires=expires, left=left))
 
     def log_message(self, fmt, *args):
         # токен в логе маскируем, healthcheck не шумит
@@ -410,6 +639,8 @@ def cmd_add(args):
                 "downloads": 0,
             }
             print(f"{name}\n  URL:     {connect_url(base)}\n  логин:   {user}\n  пароль:  {code}\n  страница: {base}/p/{token}")
+            if args.qr:
+                print_qr(f"{base}/p/{token}")
         save_db(db)
 
 
@@ -428,6 +659,17 @@ def cmd_list(args):
                   f"  пароль:  {e.get('code', '-')}\n  страница: {base}/p/{token}")
         else:
             print(f"{token[:8]}  {e['file']:<30} {e.get('user', '-'):<16} {state or 'активна':<10} {used}")
+
+
+def cmd_qr(args):
+    base = default_base_url(args)
+    hits = [(t, e) for t, e in load_db().items()
+            if (t.startswith(args.target) or e["file"] == args.target) and token_state(e) is None]
+    if not hits:
+        sys.exit("Активных ссылок не найдено")
+    for token, e in hits:
+        print(f"{e['file']}  логин: {e.get('user', '-')}  пароль: {e.get('code', '-')}\n  страница: {base}/p/{token}")
+        print_qr(f"{base}/p/{token}")
 
 
 def cmd_revoke(args):
@@ -538,7 +780,12 @@ def main():
     a.add_argument("--ttl", type=float, default=24, help="срок жизни, часов (0 - бессрочно)")
     a.add_argument("--max", type=int, default=3, help="лимит скачиваний (0 - без лимита)")
     a.add_argument("--user", help="логин для импорта из приложения (по умолчанию имя файла)")
+    a.add_argument("--no-qr", dest="qr", action="store_false", help="не печатать QR со ссылкой на страницу")
     a.set_defaults(func=cmd_add)
+
+    q = sub.add_parser("qr", parents=[common], help="QR живой ссылки по префиксу токена или имени файла")
+    q.add_argument("target")
+    q.set_defaults(func=cmd_qr)
 
     sub.add_parser("health", parents=[common], help="проверка для HEALTHCHECK").set_defaults(func=cmd_health)
     ls = sub.add_parser("list", parents=[common], help="список ссылок")
