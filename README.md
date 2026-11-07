@@ -1,21 +1,48 @@
 <p align="right"><b>Русский</b> · <a href="README.en.md">English</a></p>
 
-# ovpn-sender
+<h1 align="center">ovpn-sender</h1>
 
-Раздача готовых `.ovpn` профилей с эмуляцией импорта OpenVPN Access Server. Пользователь вводит в OpenVPN Connect (Import Profile -> URL) адрес сервера, логин и одноразовый пароль и получает профиль. Работает на iPhone, Android, Windows и macOS, ставить Access Server не нужно.
+<p align="center">
+  Выдача <code>.ovpn</code> профилей по одноразовому паролю, как в OpenVPN Access Server,<br>
+  но без Access Server: один файл на Python и Docker-образ.
+</p>
 
-- один файл на Python, только стандартная библиотека;
-- образ на `python:3.12-alpine`, около 50-60 МБ;
+<p align="center">
+  <a href="https://github.com/mikedigriz/ovpn-sender/actions/workflows/docker.yml"><img src="https://github.com/mikedigriz/ovpn-sender/actions/workflows/docker.yml/badge.svg" alt="build"></a>
+  <a href="https://hub.docker.com/r/mikedigriz/ovpn-sender"><img src="https://img.shields.io/docker/image-size/mikedigriz/ovpn-sender/latest?logo=docker&label=image" alt="docker image"></a>
+  <img src="https://img.shields.io/badge/python-3.8%2B-blue?logo=python&logoColor=white" alt="python 3.8+">
+  <img src="https://img.shields.io/badge/dependencies-0-brightgreen" alt="no dependencies">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-lightgrey" alt="MIT"></a>
+</p>
+
+<p align="center">
+  <img src="docs/preview.png" width="380" alt="Страница по ссылке: скачивание профиля, данные для импорта из приложения и QR-код">
+</p>
+
+## Как это работает
+
+1. Админ кладёт `.ovpn` в папку и выполняет `ovpn add client1.ovpn`. В ответ - URL, логин, одноразовый пароль, ссылка на страницу и QR-код этой ссылки прямо в терминале.
+2. Пользователь в OpenVPN Connect нажимает **+** -> **Import Profile** -> **URL** и вводит URL, логин и пароль. Либо сканирует QR и открывает страницу (на скриншоте выше).
+3. Профиль импортирован, пароль сгорает. По умолчанию он живёт 24 часа и даёт 3 импорта.
+
+Работает на iPhone, Android, Windows и macOS.
+
+## Возможности
+
+- один файл на Python, только стандартная библиотека, образ на `python:3.12-alpine` около 50-60 МБ;
+- импорт прямо из OpenVPN Connect по протоколу Access Server, без ручной передачи файлов;
 - одноразовые пароли со сроком жизни и лимитом импортов, защита от перебора;
+- запасная страница для браузера с кнопкой скачивания и QR-кодом;
 - HTTPS прямо в контейнере на готовых PEM-сертификатах или работа за своим reverse proxy.
 
-Валидный сертификат нужен в любом режиме: OpenVPN Connect ходит только по HTTPS и не принимает самоподписанные сертификаты.
+> [!IMPORTANT]
+> Валидный сертификат нужен в любом режиме: OpenVPN Connect ходит только по HTTPS и не принимает самоподписанные сертификаты.
 
 ## Содержание
 
 - [Быстрый старт: HTTPS в контейнере](#быстрый-старт-https-в-контейнере)
 - [За своим reverse proxy](#за-своим-reverse-proxy)
-- [Профили и выдача доступа](#профили-и-выдача-доступа)
+- [Выдача доступа](#выдача-доступа)
 - [Переменные окружения](#переменные-окружения)
 - [Самостоятельная сборка](#самостоятельная-сборка)
 - [Публикация образа](#публикация-образа)
@@ -45,10 +72,6 @@ printf '#!/bin/sh\nsetfacl -R -m u:10001:rX /etc/letsencrypt/live /etc/letsencry
 Запуск:
 
 ```bash
-docker pull mikedigriz/ovpn-sender:latest
-```
-
-```bash
 docker run -d --name ovpn --restart unless-stopped \
   -p 443:8080 \
   -e OVPN_DOMAIN=vpn.example.com \
@@ -65,6 +88,8 @@ docker run -d --name ovpn --restart unless-stopped \
 ```bash
 -v /path/to/certs:/certs:ro -e OVPN_CERT=/certs/fullchain.pem -e OVPN_KEY=/certs/privkey.pem
 ```
+
+Дальше - [выдача доступа](#выдача-доступа).
 
 ## За своим reverse proxy
 
@@ -89,7 +114,7 @@ docker compose up -d
 - Если прокси режет клиентов по User-Agent, пропустите `Connect/<версия>/...` на этих путях.
 - `OVPN_TRUSTED_PROXIES` - адреса прокси, которым бэкенд верит `X-Real-IP` и `X-Forwarded-For`. Прокси на хосте ходит в контейнер через шлюз docker-сети, отсюда значение по умолчанию в compose: `172.16.0.0/12`. Без этой настройки антиперебор считает всех клиентов одним IP. Прокси должен перезаписывать эти заголовки, а не пропускать присланные клиентом.
 
-## Профили и выдача доступа
+## Выдача доступа
 
 Профили кладутся в смонтированную папку (`/srv/ovpn/profiles` или `./profiles` для compose). Читать их должен uid 10001:
 
@@ -111,14 +136,7 @@ client1.ovpn
   страница: https://vpn.example.com/p/<token>
 ```
 
-Пользователь ставит OpenVPN Connect, нажимает **+** -> **Import Profile** -> **URL** и вводит URL, логин и пароль. Пароль одноразовый, по умолчанию живёт 24 часа и даёт 3 импорта. Страница по ссылке - запасной путь для браузера, там есть кнопка "Скачать профиль". Под данными `add` печатает QR этой страницы: его можно сканировать камерой телефона прямо с экрана. Если страницу открыли на ПК, QR есть и на ней.
-
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/preview-dark.png">
-  <img src="docs/preview-light.png" width="360" alt="Страница по ссылке: скачивание, импорт из приложения и QR">
-</picture>
-
-В режиме compose вместо `docker exec ovpn` используется `docker compose exec ovpn-sender`.
+Под этими строками печатается QR-код страницы: его можно сканировать камерой телефона прямо с экрана. Если страницу открыли на ПК, QR есть и на ней. В режиме compose вместо `docker exec ovpn` используется `docker compose exec ovpn-sender`.
 
 | Команда | Что делает |
 |---|---|
@@ -146,6 +164,9 @@ client1.ovpn
 Только для compose (`.env`): `OVPN_HOST_PORT` - порт на `127.0.0.1` хоста, `OVPN_IMAGE` - готовый образ вместо локальной сборки.
 
 ## Самостоятельная сборка
+
+<details>
+<summary>Docker, Docker Compose, multi-arch, без Docker</summary>
 
 ### Docker
 
@@ -186,14 +207,19 @@ python3 ovpn_sender.py add client1.ovpn         # в другом термина
 
 Для HTTPS без прокси добавьте `OVPN_CERT` и `OVPN_KEY` (или `OVPN_DOMAIN`). Порт 443 без root недоступен, поэтому слушайте 8080 и пробросьте на него 443 файрволом.
 
+</details>
+
 ## Публикация образа
+
+<details>
+<summary>GitHub Actions -> Docker Hub для своего форка</summary>
 
 Workflow [.github/workflows/docker.yml](.github/workflows/docker.yml) собирает образ для `amd64` и `arm64` и публикует его в Docker Hub:
 
 - пуш в `main` - тег `latest`;
 - тег `vX.Y.Z` - теги `X.Y.Z` и `X.Y`.
 
-Настройка для своего форка:
+Настройка:
 
 1. Docker Hub -> Account settings -> Personal access tokens -> создать токен с правом Read & Write.
 2. GitHub -> Settings -> Secrets and variables -> Actions: добавить секреты `DOCKERHUB_USERNAME` и `DOCKERHUB_TOKEN`.
@@ -205,7 +231,12 @@ Workflow [.github/workflows/docker.yml](.github/workflows/docker.yml) собир
 git tag v1.0.0 && git push origin v1.0.0
 ```
 
+</details>
+
 ## Протокол
+
+<details>
+<summary>Как Connect импортирует профиль и какие запросы обслуживает сервер</summary>
 
 По [openvpn-rfc/webauth.md](https://github.com/OpenVPN/openvpn-rfc/blob/master/webauth.md):
 
@@ -222,10 +253,12 @@ git tag v1.0.0 && git push origin v1.0.0
 
 Запросы сняты с OpenVPN Connect 3.7 (Android) и 3.9 (Windows): путь из URL отбрасывается, User-Agent имеет вид `Connect/<версия>/<платформа>`.
 
+</details>
+
 ## Безопасность
 
 - Внутри `.ovpn` обычно лежит приватный ключ клиента. Ссылка или пароль равносильны доступу к VPN, отсюда значения по умолчанию: 24 часа и 3 импорта. Каждый импорт любым способом расходует один.
-- Ссылка `/p/<token>` - полный ключ: на странице показан пароль и есть прямое скачивание. Отправляйте её доверенным каналом. Для импорта через приложение ссылка не нужна, достаточно URL, логина и пароля.
+- Ссылка `/p/<token>` - полный ключ: на странице показан пароль и есть прямое скачивание. QR-код содержит ту же ссылку. Отправляйте её доверенным каналом. Для импорта через приложение ссылка не нужна, достаточно URL, логина и пароля.
 - Пароль - 10 символов из 32-символьного алфавита (около 50 бит). После 10 неверных попыток с одного IP за 15 минут сервер отвечает 429.
 - Отдаются только `*.ovpn` из `/profiles`, имена с путями отклоняются.
 - TLS 1.2 и выше. TLS-рукопожатие идёт в потоке обработчика с таймаутом 30 секунд, поэтому молчащий клиент не блокирует сервер.

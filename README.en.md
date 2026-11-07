@@ -1,21 +1,48 @@
 <p align="right"><a href="README.md">Русский</a> · <b>English</b></p>
 
-# ovpn-sender
+<h1 align="center">ovpn-sender</h1>
 
-Hands out ready-made `.ovpn` profiles by emulating the OpenVPN Access Server import flow. The user enters the server address, a username and a one-time password in OpenVPN Connect (Import Profile -> URL) and gets the profile. Works on iPhone, Android, Windows and macOS, no Access Server required.
+<p align="center">
+  Hand out <code>.ovpn</code> profiles with a one-time password, like OpenVPN Access Server does,<br>
+  but without Access Server: a single Python file and a Docker image.
+</p>
 
-- a single Python file, standard library only;
-- image based on `python:3.12-alpine`, about 50-60 MB;
+<p align="center">
+  <a href="https://github.com/mikedigriz/ovpn-sender/actions/workflows/docker.yml"><img src="https://github.com/mikedigriz/ovpn-sender/actions/workflows/docker.yml/badge.svg" alt="build"></a>
+  <a href="https://hub.docker.com/r/mikedigriz/ovpn-sender"><img src="https://img.shields.io/docker/image-size/mikedigriz/ovpn-sender/latest?logo=docker&label=image" alt="docker image"></a>
+  <img src="https://img.shields.io/badge/python-3.8%2B-blue?logo=python&logoColor=white" alt="python 3.8+">
+  <img src="https://img.shields.io/badge/dependencies-0-brightgreen" alt="no dependencies">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-lightgrey" alt="MIT"></a>
+</p>
+
+<p align="center">
+  <img src="docs/preview.png" width="380" alt="Link page (in Russian): profile download, in-app import data and a QR code">
+</p>
+
+## How it works
+
+1. The admin drops an `.ovpn` into a folder and runs `ovpn add client1.ovpn`. The output has the URL, username, one-time password, a link page and a QR code of that link right in the terminal.
+2. In OpenVPN Connect the user taps **+** -> **Import Profile** -> **URL** and enters the URL, username and password. Or scans the QR code and opens the page (pictured above, in Russian).
+3. The profile is imported and the password is spent. By default, it lives 24 hours and allows 3 imports.
+
+Works on iPhone, Android, Windows and macOS.
+
+## Features
+
+- a single Python file, standard library only; image based on `python:3.12-alpine`, about 50-60 MB;
+- import straight from OpenVPN Connect via the Access Server protocol, no files to pass around;
 - one-time passwords with expiry and an import limit, brute-force protection;
+- a browser fallback page with a download button and a QR code;
 - HTTPS inside the container from ready PEM certificates, or plain HTTP behind your own reverse proxy.
 
-A valid certificate is required either way: OpenVPN Connect only talks HTTPS and rejects self-signed certificates.
+> [!IMPORTANT]
+> A valid certificate is required either way: OpenVPN Connect only talks HTTPS and rejects self-signed certificates.
 
 ## Contents
 
 - [Quick start: HTTPS in the container](#quick-start-https-in-the-container)
 - [Behind your own reverse proxy](#behind-your-own-reverse-proxy)
-- [Profiles and access](#profiles-and-access)
+- [Issuing access](#issuing-access)
 - [Environment variables](#environment-variables)
 - [Building it yourself](#building-it-yourself)
 - [Publishing the image](#publishing-the-image)
@@ -45,10 +72,6 @@ printf '#!/bin/sh\nsetfacl -R -m u:10001:rX /etc/letsencrypt/live /etc/letsencry
 Run:
 
 ```bash
-docker pull mikedigriz/ovpn-sender:latest
-```
-
-```bash
 docker run -d --name ovpn --restart unless-stopped \
   -p 443:8080 \
   -e OVPN_DOMAIN=vpn.example.com \
@@ -65,6 +88,8 @@ Certificate not from certbot: mount any PEM files and set the paths explicitly:
 ```bash
 -v /path/to/certs:/certs:ro -e OVPN_CERT=/certs/fullchain.pem -e OVPN_KEY=/certs/privkey.pem
 ```
+
+Next: [issuing access](#issuing-access).
 
 ## Behind your own reverse proxy
 
@@ -89,7 +114,7 @@ The proxy needs three paths. An Nginx example is in [nginx/ovpn-sender.conf](ngi
 - If the proxy blocks clients by User-Agent, allow `Connect/<version>/...` on these paths.
 - `OVPN_TRUSTED_PROXIES` lists the proxy addresses whose `X-Real-IP` and `X-Forwarded-For` the backend trusts. A proxy on the host reaches the container through the docker network gateway, hence the compose default `172.16.0.0/12`. Without it, brute-force protection sees every client as one IP. The proxy must overwrite these headers rather than pass through what the client sent.
 
-## Profiles and access
+## Issuing access
 
 Put profiles into the mounted directory (`/srv/ovpn/profiles`, or `./profiles` with compose). They must be readable by uid 10001:
 
@@ -113,16 +138,7 @@ client1.ovpn
 
 (The CLI output is in Russian: URL, username, password, link page.)
 
-The user installs OpenVPN Connect, taps **+** -> **Import Profile** -> **URL** and enters the URL, username and password. The password is one-time: by default it lives 24 hours and allows 3 imports. The link page is a browser fallback with a "Download profile" button. Below the data `add` prints a QR code of that page, so a phone camera can scan it right off the screen. When the page is opened on a PC, it shows the QR as well.
-
-The page (in Russian):
-
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/preview-dark.png">
-  <img src="docs/preview-light.png" width="360" alt="Link page: download, in-app import and QR code">
-</picture>
-
-With compose use `docker compose exec ovpn-sender` instead of `docker exec ovpn`.
+A QR code of the page is printed below these lines, so a phone camera can scan it right off the screen. When the page is opened on a PC, it shows the QR code as well. With compose use `docker compose exec ovpn-sender` instead of `docker exec ovpn`.
 
 | Command | What it does |
 |---|---|
@@ -150,6 +166,9 @@ Deleting a file from `profiles/` immediately invalidates all access issued for i
 Compose only (`.env`): `OVPN_HOST_PORT` - port on the host's `127.0.0.1`, `OVPN_IMAGE` - a prebuilt image instead of a local build.
 
 ## Building it yourself
+
+<details>
+<summary>Docker, Docker Compose, multi-arch, without Docker</summary>
 
 ### Docker
 
@@ -190,14 +209,19 @@ python3 ovpn_sender.py add client1.ovpn         # in another terminal, same vari
 
 For HTTPS without a proxy add `OVPN_CERT` and `OVPN_KEY` (or `OVPN_DOMAIN`). Port 443 needs root, so listen on 8080 and forward 443 to it with the firewall.
 
+</details>
+
 ## Publishing the image
+
+<details>
+<summary>GitHub Actions -> Docker Hub for your fork</summary>
 
 The workflow [.github/workflows/docker.yml](.github/workflows/docker.yml) builds the image for `amd64` and `arm64` and pushes it to Docker Hub:
 
 - push to `main` - tag `latest`;
 - tag `vX.Y.Z` - tags `X.Y.Z` and `X.Y`.
 
-Setting it up in your fork:
+Setup:
 
 1. Docker Hub -> Account settings -> Personal access tokens -> create a token with Read & Write.
 2. GitHub -> Settings -> Secrets and variables -> Actions: add secrets `DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN`.
@@ -209,7 +233,12 @@ Releasing a version:
 git tag v1.0.0 && git push origin v1.0.0
 ```
 
+</details>
+
 ## Protocol
+
+<details>
+<summary>How Connect imports a profile and which requests the server handles</summary>
 
 Following [openvpn-rfc/webauth.md](https://github.com/OpenVPN/openvpn-rfc/blob/master/webauth.md):
 
@@ -226,10 +255,12 @@ Following [openvpn-rfc/webauth.md](https://github.com/OpenVPN/openvpn-rfc/blob/m
 
 Requests were captured from OpenVPN Connect 3.7 (Android) and 3.9 (Windows): the path is dropped from the URL, the User-Agent looks like `Connect/<version>/<platform>`.
 
+</details>
+
 ## Security
 
 - An `.ovpn` usually contains the client's private key. A link or a password equals VPN access, hence the defaults: 24 hours and 3 imports. Every import, by any method, uses one up.
-- The `/p/<token>` link is a full key: the page shows the password and offers a direct download. Send it over a trusted channel. Importing via the app needs no link, only the URL, username and password.
+- The `/p/<token>` link is a full key: the page shows the password and offers a direct download. The QR code holds the same link. Send it over a trusted channel. Importing via the app needs no link, only the URL, username and password.
 - The password is 10 characters from a 32-character alphabet (about 50 bits). After 10 wrong attempts from one IP within 15 minutes the server answers 429.
 - Only `*.ovpn` files from `/profiles` are served, names with paths are rejected.
 - TLS 1.2 or newer. The TLS handshake runs in the handler thread with a 30-second timeout, so a silent client does not block the server.
