@@ -115,6 +115,13 @@ client1.ovpn
 
 The user installs OpenVPN Connect, taps **+** -> **Import Profile** -> **URL** and enters the URL, username and password. The password is one-time: by default it lives 24 hours and allows 3 imports. The link page is a browser fallback with a "Download profile" button. Below the data `add` prints a QR code of that page, so a phone camera can scan it right off the screen. When the page is opened on a PC, it shows the QR as well.
 
+The page (in Russian):
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/preview-dark.png">
+  <img src="docs/preview-light.png" width="360" alt="Link page: download, in-app import and QR code">
+</picture>
+
 With compose use `docker compose exec ovpn-sender` instead of `docker exec ovpn`.
 
 | Command | What it does |

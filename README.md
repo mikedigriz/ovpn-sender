@@ -113,6 +113,11 @@ client1.ovpn
 
 Пользователь ставит OpenVPN Connect, нажимает **+** -> **Import Profile** -> **URL** и вводит URL, логин и пароль. Пароль одноразовый, по умолчанию живёт 24 часа и даёт 3 импорта. Страница по ссылке - запасной путь для браузера, там есть кнопка "Скачать профиль". Под данными `add` печатает QR этой страницы: его можно сканировать камерой телефона прямо с экрана. Если страницу открыли на ПК, QR есть и на ней.
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/preview-dark.png">
+  <img src="docs/preview-light.png" width="360" alt="Страница по ссылке: скачивание, импорт из приложения и QR">
+</picture>
+
 В режиме compose вместо `docker exec ovpn` используется `docker compose exec ovpn-sender`.
 
 | Команда | Что делает |
