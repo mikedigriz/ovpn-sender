@@ -246,6 +246,7 @@ Following [openvpn-rfc/webauth.md](https://github.com/OpenVPN/openvpn-rfc/blob/m
 2. `GET /rest/GetUserlogin?tls-cryptv2=1&action=import` with Basic auth:
    - valid credentials - 200 `text/plain` with the profile;
    - invalid - 401 and XML `<Error><Type>Authorization Required</Type>...`.
+3. `# OVPN_ACCESS_SERVER_PROFILE=<remote host>` and `FRIENDLY_NAME` are prepended to the served profile unless already present, so Connect names the profile after the VPN server address rather than the import domain. Without `remote` - the file name.
 
 | Request | Description |
 |---|---|

@@ -91,6 +91,21 @@ def connect_url(base_url):
     return f"{s.scheme}://{s.netloc}"
 
 
+def with_profile_name(data, filename):
+    """Называет профиль в Connect хостом из первой remote, а не доменом сервера импорта.
+
+    Метаданные - комментарии "# OVPN_ACCESS_SERVER_<KEY>=<value>" (openvpn3: cliopthelper.hpp).
+    Нет remote - имя файла.
+    """
+    m = re.search(rb"^[ \t]*remote[ \t]+([^\s#;]+)", data, re.M)
+    name = m.group(1).decode("utf-8", "replace") if m else Path(filename).stem
+    name = re.sub(r"[\x00-\x1f\x7f]", "", name)
+    meta = b"".join(f"# OVPN_ACCESS_SERVER_{key}={name}\n".encode()
+                    for key in ("PROFILE", "FRIENDLY_NAME")
+                    if f"OVPN_ACCESS_SERVER_{key}=".encode() not in data)
+    return meta + data
+
+
 def new_code():
     return "".join(secrets.choice(CODE_ALPHABET) for _ in range(CODE_LEN))
 
@@ -502,7 +517,7 @@ class Handler(BaseHTTPRequestHandler):
                 return self._rest_error(401, "Authorization Required",
                                         "AUTH_FAILED: invalid or expired one-time password",
                                         {"WWW-Authenticate": 'Basic realm="OpenVPN Access Server"'})
-            data = path.read_bytes()
+            data = with_profile_name(path.read_bytes(), entry["file"])
             if self.command != "HEAD":
                 self._count(db, entry)
         # как у Access Server (openvpn-rfc/webauth.md): REST отдает text/plain, токен-ссылка - профиль
@@ -540,7 +555,7 @@ class Handler(BaseHTTPRequestHandler):
             if kind == "p":
                 return self._page(token, entry)
 
-            data = path.read_bytes()
+            data = with_profile_name(path.read_bytes(), entry["file"])
             # HEAD и предзагрузка не тратят лимит
             if self.command == "GET":
                 self._count(db, entry)

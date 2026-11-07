@@ -244,6 +244,7 @@ git tag v1.0.0 && git push origin v1.0.0
 2. `GET /rest/GetUserlogin?tls-cryptv2=1&action=import` с Basic auth:
    - верные данные - 200 `text/plain` с профилем;
    - неверные - 401 и XML `<Error><Type>Authorization Required</Type>...`.
+3. В начало отдаваемого профиля добавляются `# OVPN_ACCESS_SERVER_PROFILE=<хост из remote>` и `FRIENDLY_NAME`, если их там нет: так профиль в Connect называется адресом VPN-сервера, а не доменом, с которого шёл импорт. Без `remote` - имя файла.
 
 | Запрос | Описание |
 |---|---|
