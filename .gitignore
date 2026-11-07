@@ -1,0 +1,6 @@
+profiles/*
+!profiles/.gitkeep
+.env
+tokens.json
+tokens.tmp
+__pycache__/

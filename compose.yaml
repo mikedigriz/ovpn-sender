@@ -1,0 +1,27 @@
+# Режим "за своим reverse proxy" (Nginx и т.п. на хосте). HTTPS в самом контейнере -
+# см. README (docker run с OVPN_DOMAIN и /etc/letsencrypt).
+services:
+  ovpn-sender:
+    build: .
+    image: ${OVPN_IMAGE:-ovpn-sender:latest}
+    container_name: ovpn-sender
+    restart: unless-stopped
+    ports:
+      # только localhost: снаружи доступ через прокси
+      - "127.0.0.1:${OVPN_HOST_PORT:-8080}:8080"
+    environment:
+      # внешний адрес страницы ссылки, например https://vpn.example.com/ovpn
+      OVPN_BASE_URL: ${OVPN_BASE_URL:?укажите OVPN_BASE_URL в .env}
+      # откуда контейнер видит прокси: шлюз docker-сети
+      OVPN_TRUSTED_PROXIES: ${OVPN_TRUSTED_PROXIES:-172.16.0.0/12}
+    volumes:
+      - ./profiles:/profiles:ro
+      - data:/data
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    mem_limit: 64m
+    pids_limit: 64
+
+volumes:
+  data:
