@@ -151,6 +151,12 @@ A QR code of the page is printed below these lines, so a phone camera can scan i
 
 Deleting a file from `profiles/` immediately invalidates all access issued for it. An already imported profile keeps working: to cut a client off, revoke its certificate on the VPN server.
 
+> [!NOTE]
+> When importing by URL, OpenVPN Connect remembers the address the profile was imported from and shows it in the profile settings as **Server Hostname (locked)**. This field cannot be changed, neither in the app nor from the server: the address is stored on the device, not in the profile. The connection itself uses `remote` from the profile, so the VPN works fine, but everyone who imported the profile sees the distribution address. To hide it:
+>
+> - import the file via the "Download profile" button on the page - the field then shows the host from `remote`;
+> - serve from the same address as `remote`: for example, point a domain at the VPN server and proxy `/rest/`, `/openvpn-api/` and `/ovpn/` from it to ovpn-sender.
+
 ## Environment variables
 
 | Variable | Default | Description |
