@@ -92,13 +92,13 @@ def connect_url(base_url):
 
 
 def with_profile_name(data, filename):
-    """Называет профиль в Connect хостом из первой remote, а не доменом сервера импорта.
+    """Имя профиля в Connect: "<хост из первой remote> [<имя файла>]", без remote - имя файла.
 
     Метаданные - комментарии "# OVPN_ACCESS_SERVER_<KEY>=<value>" (openvpn3: cliopthelper.hpp).
-    Нет remote - имя файла.
     """
     m = re.search(rb"^[ \t]*remote[ \t]+([^\s#;]+)", data, re.M)
-    name = m.group(1).decode("utf-8", "replace") if m else Path(filename).stem
+    stem = Path(filename).stem
+    name = f"{m.group(1).decode('utf-8', 'replace')} [{stem}]" if m else stem
     name = re.sub(r"[\x00-\x1f\x7f]", "", name)
     meta = b"".join(f"# OVPN_ACCESS_SERVER_{key}={name}\n".encode()
                     for key in ("PROFILE", "FRIENDLY_NAME")
@@ -375,7 +375,6 @@ a.alt{{background:#e4e4e4;color:#222}}
 ol{{padding-left:20px;line-height:1.5}} small{{color:#777}}
 td{{padding:4px 8px 4px 0}} code{{font-size:18px;user-select:all;-webkit-user-select:all}}
 .qr svg{{display:block;width:220px;height:220px;margin:8px 0}}
-@media (max-width:600px){{.qr{{display:none}}}}
 @media (prefers-color-scheme:dark){{body{{background:#111;color:#eee}}a.alt{{background:#333;color:#eee}}}}
 </style></head><body>
 <h2>Профиль {name}</h2>
@@ -578,8 +577,8 @@ class Handler(BaseHTTPRequestHandler):
             app_import = APP_IMPORT.format(url=html.escape(connect_url(Handler.base_url)),
                                            user=html.escape(entry["user"]), code=html.escape(entry["code"]))
         try:
-            # страница открыта на ПК - эта же ссылка камерой на телефон
-            qr = f'<div class="qr"><h3>Открыть на телефоне</h3>{qr_svg(f"{Handler.base_url}/p/{token}")}</div>'
+            # эта же ссылка камерой на другое устройство
+            qr = f'<div class="qr"><h3>Открыть на другом устройстве</h3>{qr_svg(f"{Handler.base_url}/p/{token}")}</div>'
         except ValueError:
             qr = ""
         # полный URL: за прокси с префиксом (/vpn/) путь от корня ушел бы мимо

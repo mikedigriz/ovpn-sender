@@ -138,7 +138,7 @@ client1.ovpn
 
 (The CLI output is in Russian: URL, username, password, link page.)
 
-A QR code of the page is printed below these lines, so a phone camera can scan it right off the screen. When the page is opened on a PC, it shows the QR code as well. With compose use `docker compose exec ovpn-sender` instead of `docker exec ovpn`.
+A QR code of the page is printed below these lines, so a phone camera can scan it right off the screen. The page itself shows the QR code too, so it can be opened on one device and scanned from another. With compose use `docker compose exec ovpn-sender` instead of `docker exec ovpn`.
 
 | Command | What it does |
 |---|---|
@@ -246,7 +246,7 @@ Following [openvpn-rfc/webauth.md](https://github.com/OpenVPN/openvpn-rfc/blob/m
 2. `GET /rest/GetUserlogin?tls-cryptv2=1&action=import` with Basic auth:
    - valid credentials - 200 `text/plain` with the profile;
    - invalid - 401 and XML `<Error><Type>Authorization Required</Type>...`.
-3. `# OVPN_ACCESS_SERVER_PROFILE=<remote host>` and `FRIENDLY_NAME` are prepended to the served profile unless already present, so Connect names the profile after the VPN server address rather than the import domain. Without `remote` - the file name.
+3. `# OVPN_ACCESS_SERVER_PROFILE=<remote host> [<file name>]` and `FRIENDLY_NAME` are prepended to the served profile unless already present, so Connect names the profile after the VPN server address and the file name rather than the import domain. Without `remote` - the file name only.
 
 | Request | Description |
 |---|---|
