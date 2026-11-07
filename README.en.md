@@ -3,8 +3,8 @@
 <h1 align="center">ovpn-sender</h1>
 
 <p align="center">
-  Hand out <code>.ovpn</code> profiles with a one-time password, like OpenVPN Access Server does,<br>
-  but without Access Server: a single Python file and a Docker image.
+  OpenVPN Access Server emulation.<br>
+  Lets you hand out profiles to an iPhone with a link.
 </p>
 
 <p align="center">

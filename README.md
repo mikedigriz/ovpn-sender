@@ -3,8 +3,8 @@
 <h1 align="center">ovpn-sender</h1>
 
 <p align="center">
-  Выдача <code>.ovpn</code> профилей по одноразовому паролю, как в OpenVPN Access Server,<br>
-  но без Access Server: один файл на Python и Docker-образ.
+  Эмуляция OpenVPN Access Server.<br>
+  Позволяет отдавать профили ссылкой на iPhone.
 </p>
 
 <p align="center">
