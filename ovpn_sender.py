@@ -569,7 +569,7 @@ class Handler(BaseHTTPRequestHandler):
         name = entry["file"]
         download = f"/d/{token}/{quote(name)}"
         left = (entry["max_downloads"] - entry["downloads"]) if entry["max_downloads"] else "без ограничений"
-        expires = time.strftime("%d.%m.%Y %H:%M", time.localtime(entry["expires"])) if entry["expires"] else "бессрочно"
+        expires = time.strftime("%d.%m.%Y %H:%M %Z", time.localtime(entry["expires"])) if entry["expires"] else "бессрочно"
         # формат токен-ссылок Access Server
         deeplink = f"openvpn://import-profile/{Handler.base_url}/rest/GetProfileViaToken?token={token}"
         app_import = ""

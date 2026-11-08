@@ -14,6 +14,8 @@ services:
       OVPN_BASE_URL: ${OVPN_BASE_URL:?укажите OVPN_BASE_URL в .env}
       # откуда контейнер видит прокси: шлюз docker-сети
       OVPN_TRUSTED_PROXIES: ${OVPN_TRUSTED_PROXIES:-172.16.0.0/12}
+      # часовой пояс в POSIX-формате: имена вроде Europe/Moscow требуют tzdata в образе
+      TZ: ${OVPN_TZ:-MSK-3}
     volumes:
       - ./profiles:/profiles:ro
       - data:/data

@@ -168,8 +168,9 @@ Deleting a file from `profiles/` immediately invalidates all access issued for i
 | `OVPN_PORT` | `8080` | port inside the container |
 | `OVPN_PROFILES_DIR` | `/profiles` | where `.ovpn` files are read from |
 | `OVPN_DATA_DIR` | `/data` | database of issued access (a volume, survives image updates) |
+| `TZ` | UTC | time zone for times on the page, POSIX format: `MSK-3` means UTC+3 |
 
-Compose only (`.env`): `OVPN_HOST_PORT` - port on the host's `127.0.0.1`, `OVPN_IMAGE` - a prebuilt image instead of a local build.
+Compose only (`.env`): `OVPN_HOST_PORT` - port on the host's `127.0.0.1`, `OVPN_IMAGE` - a prebuilt image instead of a local build, `OVPN_TZ` - value of `TZ` (default `MSK-3`).
 
 ## Building it yourself
 
